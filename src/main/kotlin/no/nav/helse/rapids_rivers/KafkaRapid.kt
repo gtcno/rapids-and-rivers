@@ -1,6 +1,11 @@
 package no.nav.helse.rapids_rivers
 
-import org.apache.kafka.clients.consumer.*
+import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
+import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.ConsumerRecords
+import org.apache.kafka.clients.consumer.KafkaConsumer
+import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.TopicPartition
@@ -9,7 +14,7 @@ import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.slf4j.LoggerFactory
 import java.time.Duration
-import java.util.*
+import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
 class KafkaRapid(
@@ -27,7 +32,8 @@ class KafkaRapid(
 
     private val stringDeserializer = StringDeserializer()
     private val stringSerializer = StringSerializer()
-    private val autoCommit = consumerConfig[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG]?.let { if (it is Boolean) it else "true" == "$it".toLowerCase() } ?: false
+    private val autoCommit = consumerConfig[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG]?.let { if (it is Boolean) it else "true" == "$it".toLowerCase() }
+        ?: false
     private val consumer = KafkaConsumer(consumerConfig, stringDeserializer, stringDeserializer)
     private val producer = KafkaProducer(producerConfig, stringSerializer, stringSerializer)
 
@@ -97,7 +103,7 @@ class KafkaRapid(
 
     private fun onRecord(record: ConsumerRecord<String, String>) {
         val context = KafkaMessageContext(record, this)
-        listeners.forEach { it.onMessage(record.value(), context) }
+        listeners.forEach { it.onMessage(record.key(), record.value(), context) }
     }
 
     private fun consumeMessages() {

@@ -26,8 +26,8 @@ class InMemoryRapid(private val ktor: ApplicationEngine) : RapidsConnection() {
         ktor.stop(5000, 5000)
     }
 
-    fun sendToListeners(message: String) {
-        val context = object: MessageContext {
+    fun sendToListeners(key: String?, message: String) {
+        val context = object : MessageContext {
             override fun send(message: String) {
                 publish(message)
             }
@@ -36,9 +36,10 @@ class InMemoryRapid(private val ktor: ApplicationEngine) : RapidsConnection() {
                 publish(key, message)
             }
         }
-
-        listeners.forEach { it.onMessage(message, context) }
+        listeners.forEach { it.onMessage(key, message, context) }
     }
+
+    fun sendToListeners(message: String) = sendToListeners(null, message)
 
     data class RapidMessage(val key: String?, val value: String)
 }

@@ -3,7 +3,11 @@ package no.nav.helse.rapids_rivers
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import kotlinx.coroutines.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import no.nav.common.KafkaEnvironment
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.consumer.Consumer
@@ -17,29 +21,37 @@ import org.apache.kafka.common.config.SaslConfigs
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
 import org.awaitility.Awaitility.await
-import org.junit.jupiter.api.*
-import org.junit.jupiter.api.Assertions.*
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 import java.time.Duration
-import java.util.*
+import java.util.HashMap
+import java.util.Properties
+import java.util.UUID
 import java.util.concurrent.TimeUnit.SECONDS
 
 internal class RapidIntegrationTest {
     private companion object {
 
         private val objectMapper = jacksonObjectMapper()
-                .registerModule(JavaTimeModule())
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .registerModule(JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
         private val consumerId = "test-app"
 
         private val testTopic = "a-test-topic"
         private val anotherTestTopic = "a-test-topic"
 
         private val embeddedKafkaEnvironment = KafkaEnvironment(
-                autoStart = false,
-                noOfBrokers = 1,
-                topicInfos = listOf(testTopic, anotherTestTopic).map { KafkaEnvironment.TopicInfo(it, partitions = 1) },
-                withSchemaRegistry = false,
-                withSecurity = false
+            autoStart = false,
+            noOfBrokers = 1,
+            topicInfos = listOf(testTopic, anotherTestTopic).map { KafkaEnvironment.TopicInfo(it, partitions = 1) },
+            withSchemaRegistry = false,
+            withSecurity = false
         )
 
         private lateinit var kafkaProducer: Producer<String, String>
@@ -50,15 +62,15 @@ internal class RapidIntegrationTest {
         private lateinit var rapidJob: Job
 
         private fun producerProperties() =
-                Properties().apply {
-                    put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, embeddedKafkaEnvironment.brokersURL)
-                    put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "PLAINTEXT")
-                    put(ProducerConfig.ACKS_CONFIG, "all")
-                    put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1")
-                    put(ProducerConfig.LINGER_MS_CONFIG, "0")
-                    put(ProducerConfig.RETRIES_CONFIG, "0")
-                    put(SaslConfigs.SASL_MECHANISM, "PLAIN")
-                }
+            Properties().apply {
+                put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, embeddedKafkaEnvironment.brokersURL)
+                put(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "PLAINTEXT")
+                put(ProducerConfig.ACKS_CONFIG, "all")
+                put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "1")
+                put(ProducerConfig.LINGER_MS_CONFIG, "0")
+                put(ProducerConfig.RETRIES_CONFIG, "0")
+                put(SaslConfigs.SASL_MECHANISM, "PLAIN")
+            }
 
         private fun consumerProperties(): MutableMap<String, Any>? {
             return HashMap<String, Any>().apply {
@@ -80,8 +92,8 @@ internal class RapidIntegrationTest {
             kafkaConsumer.subscribe(listOf(testTopic))
 
             config = KafkaConfig(
-                    bootstrapServers = embeddedKafkaEnvironment.brokersURL,
-                    consumerGroupId = consumerId
+                bootstrapServers = embeddedKafkaEnvironment.brokersURL,
+                consumerGroupId = consumerId
             )
         }
 
@@ -127,7 +139,7 @@ internal class RapidIntegrationTest {
     @Test
     fun `should stop on errors`() {
         rapid.register(object : RapidsConnection.MessageListener {
-            override fun onMessage(message: String, context: RapidsConnection.MessageContext) {
+            override fun onMessage(key: String?, message: String, context: RapidsConnection.MessageContext) {
                 throw RuntimeException()
             }
         })
